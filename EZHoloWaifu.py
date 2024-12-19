@@ -30,8 +30,10 @@ class ImageProcessingApp(QWidget):
         self.depth_map = None
         self.density = 10
         self.line_density = 10
+        self.zero_depth = 128
         self.t1 = 80
         self.t2 = 180
+        self.a = 0.16 # a factor for curvature
         self.model = None  # 用于存储加载的模型
 
         self.init_ui()
@@ -115,6 +117,15 @@ class ImageProcessingApp(QWidget):
         area_control_layout.addWidget(self.brightness_label)
 
         main_layout.addLayout(area_control_layout)
+        
+        # zerodepth 滑块
+        self.zerodepth_slider = QSlider(Qt.Horizontal)
+        self.zerodepth_slider.setRange(0, 255)
+        self.zerodepth_slider.setValue(self.brightness)
+        self.zerodepth_slider.valueChanged.connect(self.update_zero_depth)
+        area_control_layout.addWidget(self.zerodepth_slider)
+        self.zerodepth_label = QLabel("零深度：128")
+        area_control_layout.addWidget(self.zerodepth_label)
 
         # 添加按钮选择文件和开始处理
         button_layout = QHBoxLayout()
@@ -180,6 +191,10 @@ class ImageProcessingApp(QWidget):
     def update_brightness(self):
         self.brightness = self.brightness_slider.value()
         self.brightness_label.setText(f"明暗阈值{self.brightness}")
+
+    def update_zero_depth(self):
+        self.zero_depth = self.zerodepth_slider.value()
+        self.zerodepth_label.setText(f"零深度：{self.zero_depth}")
 
     def display_image(self, img, image_type):
         """显示图像：原图、深度图或结果图"""
@@ -324,25 +339,23 @@ class ImageProcessingApp(QWidget):
         save_path = f"outputs/{self.file_path}.svg"
         dwg = svgwrite.Drawing(save_path, profile='tiny')
         for point in self.points:
-            depth = self.depth_map[point[1], point[0]]-128
+            depth = self.depth_map[point[1], point[0]] - self.zero_depth
             #print(f"Depth: {depth}")
             curvature = depth * self.img.shape[0] / 1000
+
+            offset = (1 + 3 * self.a) * curvature / 4
             x0 = point[0] - curvature
             x1 = point[0] + curvature
-            y0 = point[1] - curvature
-            h_x0 = point[0] - curvature * 0.16
-            h_x1 = point[0] + curvature * 0.16
-            h_y = point[1] - curvature * 0.16
+            y0 = point[1] - curvature  + offset
+            h_x0 = point[0] - curvature * self.a
+            h_x1 = point[0] + curvature * self.a
+            h_y = point[1] - curvature * self.a  + offset
+
+
             #print(f"x0: {x0}, x1: {x1}, y: {y0}, h_x0: {h_x0}, h_x1: {h_x1}, h_y: {h_y}")
             path = dwg.path(d=f"M {x0},{y0} C {h_x0},{h_y} {h_x1},{h_y} {x1},{y0}", stroke="blue", fill="none", stroke_width=1)
-            cv2.circle(final_img, (int(x0), int(y0)), 2, (0, 255, 0), -1)  # 起点
-            cv2.circle(final_img, (int(x1), int(y0)), 2, (0, 0, 255), -1)  # 终点
-            
-            cv2.circle(final_img, (int(h_x0), int(h_y)), 1, (255, 0, 255), -1)  # 手柄1
-            cv2.circle(final_img, (int(h_x1), int(h_y)), 1, (255, 255, 0), -1)  # 手柄2
 
-            cv2.circle(final_img, (point[0], point[1]), 3, (255, 0, 0), -1)  # 中心点
-            cv2.putText(final_img, str(depth), (point[0], point[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.01, (0,0,0), 1)
+            #cv2.putText(final_img, str(depth), (point[0], point[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.01, (0,0,0), 1)
             
             num_points = 50  # 曲线上的点的数量
             for i in range(num_points + 1):
@@ -351,6 +364,13 @@ class ImageProcessingApp(QWidget):
                 y = (1 - t)**3 * y0 + 3 * (1 - t)**2 * t * h_y + 3 * (1 - t) * t**2 * h_y + t**3 * y0
                 cv2.circle(final_img, (int(x), int(y)), 1, (255, 255, 255), -1)
                 #print(int(x), int(y))
+            cv2.circle(final_img, (int(x0), int(y0)), 2, (0, 255, 0), -1)  # 起点
+            cv2.circle(final_img, (int(x1), int(y0)), 2, (0, 0, 255), -1)  # 终点
+            
+            #cv2.circle(final_img, (int(h_x0), int(h_y)), 1, (255, 0, 255), -1)  # 手柄1
+            #cv2.circle(final_img, (int(h_x1), int(h_y)), 1, (255, 255, 0), -1)  # 手柄2
+
+            cv2.circle(final_img, (point[0], point[1]), 3, (255, 0, 0), -1)  # 中心点
             dwg.add(path)
         self.display_image(final_img, "final")
         dwg.save()
