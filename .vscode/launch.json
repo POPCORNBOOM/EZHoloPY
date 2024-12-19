@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python 调试程序: 当前文件",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "cube.stl",  // 传递的第一个参数
+                "10",  // 传递的第二个参数
+                "-r 10",   // 传递的第三个参数
+                "-s -0.4",
+                "-o 0"
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}
